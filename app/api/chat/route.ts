@@ -1,6 +1,55 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
+const MODEL = "gemini-3.8-flash";
+
+async function generateWithRetry(
+  ai: GoogleGenAI,
+  contents: any[],
+  maxRetries = 4
+) {
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: MODEL,
+        contents,
+      });
+
+      return response;
+    } catch (error: any) {
+      lastError = error;
+
+      const message = error?.message || "";
+      const isTemporary =
+        message.includes("503") ||
+        message.includes("UNAVAILABLE") ||
+        message.includes("high demand");
+
+      // اگر خطا موقتی نیست، دوباره تلاش نکن
+      if (!isTemporary || attempt === maxRetries) {
+        throw error;
+      }
+
+      // 1s → 2s → 4s → 8s
+      const delay = Math.pow(2, attempt) * 1000;
+
+      console.log(
+        `Gemini temporarily unavailable. Retry ${
+          attempt + 1
+        }/${maxRetries} in ${delay}ms`
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay)
+      );
+    }
+  }
+
+  throw lastError;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -11,45 +60,34 @@ export async function POST(req: Request) {
       fileMimeType,
     } = body;
 
-    // -----------------------------------------
-    // Check API Key
-    // -----------------------------------------
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
-          error: "GEMINI_API_KEY is not configured on the server.",
+          error:
+            "GEMINI_API_KEY is not configured.",
         },
         { status: 500 }
       );
     }
 
-    // -----------------------------------------
-    // Validate prompt/file
-    // -----------------------------------------
     if (!prompt && !fileBase64) {
       return NextResponse.json(
         {
-          error: "Prompt or file is required.",
+          error:
+            "Prompt or file is required.",
         },
         { status: 400 }
       );
     }
 
-    // -----------------------------------------
-    // Initialize Gemini
-    // -----------------------------------------
     const ai = new GoogleGenAI({
       apiKey,
     });
 
-    // -----------------------------------------
-    // Prepare multimodal parts
-    // -----------------------------------------
     const parts: any[] = [];
 
-    // File
     if (fileBase64 && fileMimeType) {
       parts.push({
         inlineData: {
@@ -59,35 +97,29 @@ export async function POST(req: Request) {
       });
     }
 
-    // Text prompt
     parts.push({
       text:
         prompt ||
-        "Please analyze the attached file and provide a clear, useful summary of its contents.",
+        "Please analyze the attached document and provide a clear summary.",
     });
 
-    // -----------------------------------------
-    // Generate response
-    // -----------------------------------------
-    const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
-      contents: [
+    const response = await generateWithRetry(
+      ai,
+      [
         {
           role: "user",
           parts,
         },
-      ],
-    });
+      ]
+    );
 
-    // -----------------------------------------
-    // Extract response
-    // -----------------------------------------
     const result = response.text;
 
     if (!result) {
       return NextResponse.json(
         {
-          error: "Gemini returned an empty response.",
+          error:
+            "Gemini returned an empty response.",
         },
         { status: 500 }
       );
@@ -95,27 +127,39 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       result,
-      model: "gemini-2.5-flash",
+      model: MODEL,
     });
+
   } catch (error: any) {
-    console.error("Gemini API Error Details:", error);
+    console.error(
+      "Gemini API Error:",
+      error
+    );
 
-    // -----------------------------------------
-    // Better error messages
-    // -----------------------------------------
-    let errorMessage = "Failed to generate response.";
+    const message =
+      error?.message ||
+      "Failed to generate response.";
 
-    if (error?.message) {
-      errorMessage = error.message;
+    // 503 را به پیام قابل فهم تبدیل کن
+    if (
+      message.includes("503") ||
+      message.includes("UNAVAILABLE") ||
+      message.includes("high demand")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Gemini is temporarily busy. Please try again in a few seconds.",
+        },
+        { status: 503 }
+      );
     }
 
     return NextResponse.json(
       {
-        error: errorMessage,
+        error: message,
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
