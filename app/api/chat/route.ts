@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     // استفاده از متد Stream گوگل
     const responseStream = await ai.models.generateContentStream({
-      model: "gemini-3.0-flash",
+    model: "gemini-1.5-flash",
       contents: parts,
     });
 
