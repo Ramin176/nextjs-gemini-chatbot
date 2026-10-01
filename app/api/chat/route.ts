@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     parts.push({ text: prompt });
 
   const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-1.5-flash",
       contents: parts,
     });
 
