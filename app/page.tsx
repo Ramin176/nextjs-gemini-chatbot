@@ -65,31 +65,16 @@ const sendMessage = async (e?: React.FormEvent, customPrompt?: string) => {
         }),
       });
 
-      if (!res.body) throw new Error("No response body");
-
-      // اضافه کردن یک پیام خالی برای ربات که قرار است کلمات داخل آن تایپ شوند
-      setMessages((prev) => [...prev, { role: "ai", content: "" }]);
-      setIsLoading(false); // خاموش کردن انیمیشن لودینگ به محض شروع تایپ
+      const data = await res.json();
+      
+      // پاک کردن فایل و خاموش کردن لودینگ
       setSelectedFile(null); 
+      setIsLoading(false);
 
-      // خواندن جریان داده (Stream) از سرور
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let aiText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        // دیکد کردن کلمات جدید و اضافه کردن به متن اصلی
-        aiText += decoder.decode(value, { stream: true });
-        
-        // آپدیت کردن پیام ربات در لحظه
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = { role: "ai", content: aiText };
-          return updated;
-        });
+      if (res.ok && data.result) {
+        setMessages([...newMessages, { role: "ai", content: data.result }]);
+      } else {
+        alert(data.error || "Server error occurred.");
       }
     } catch (error) {
       console.error(error);

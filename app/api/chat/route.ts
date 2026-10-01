@@ -8,7 +8,10 @@ export async function POST(req: Request) {
     const { prompt, fileBase64, fileMimeType } = body;
 
     if (!prompt) {
-      return new Response("Prompt is required", { status: 400 });
+      return new Response(JSON.stringify({ error: "Prompt is required" }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const parts: any[] = [];
@@ -17,35 +20,22 @@ export async function POST(req: Request) {
     }
     parts.push({ text: prompt });
 
-    // استفاده از متد Stream گوگل
-    const responseStream = await ai.models.generateContentStream({
-    model: "gemini-1.5-flash",
+    // استفاده از متد استاندارد و پایدار generateContent برای محیط ابری
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
       contents: parts,
     });
 
-    // ساخت یک جریان داده (ReadableStream) برای ارسال تک‌تک کلمات به مرورگر
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of responseStream) {
-            if (chunk.text) {
-              controller.enqueue(new TextEncoder().encode(chunk.text));
-            }
-          }
-          controller.close();
-        } catch (error) {
-          console.error("Stream error:", error);
-          controller.error(error);
-        }
-      }
-    });
-
-    return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    return new Response(JSON.stringify({ result: response.text }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
     });
     
   } catch (error) {
     console.error("API error:", error);
-    return new Response("Failed to generate response", { status: 500 });
+    return new Response(JSON.stringify({ error: "Failed to generate response" }), { 
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }
