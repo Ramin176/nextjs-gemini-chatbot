@@ -221,7 +221,7 @@ export default function Home() {
 
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
 
-            Gemini 2.5 Flash Ready
+          Gemini 3.8 Flash Ready
 
           </div>
 
@@ -547,8 +547,7 @@ export default function Home() {
           <div className="text-center mt-3">
 
             <p className="text-[11px] text-slate-400">
-              Powered by Gemini 2.5 Flash · AI can make
-              mistakes. Verify critical information.
+            Powered by Gemini 3.8 Flash · AI can make mistakes. Verify critical information.
             </p>
 
           </div>
