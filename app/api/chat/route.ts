@@ -1,30 +1,51 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { prompt } = body;
+    const { prompt, fileBase64, fileMimeType } = body;
 
     if (!prompt) {
-      return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+      return new Response("Prompt is required", { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const parts: any[] = [];
+    if (fileBase64 && fileMimeType) {
+      parts.push({ inlineData: { data: fileBase64, mimeType: fileMimeType } });
+    }
+    parts.push({ text: prompt });
 
-    return NextResponse.json({ result: text });
+    // استفاده از متد Stream گوگل
+    const responseStream = await ai.models.generateContentStream({
+      model: "gemini-3.0-flash",
+      contents: parts,
+    });
+
+    // ساخت یک جریان داده (ReadableStream) برای ارسال تک‌تک کلمات به مرورگر
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of responseStream) {
+            if (chunk.text) {
+              controller.enqueue(new TextEncoder().encode(chunk.text));
+            }
+          }
+          controller.close();
+        } catch (error) {
+          console.error("Stream error:", error);
+          controller.error(error);
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
     
   } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    return NextResponse.json(
-      { error: "Failed to generate response" },
-      { status: 500 }
-    );
+    console.error("API error:", error);
+    return new Response("Failed to generate response", { status: 500 });
   }
 }
